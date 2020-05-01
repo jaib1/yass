@@ -757,7 +757,17 @@ def temp_temp_partial(
 
 def align_templates(temp_, jitter, neigh_chans, ref=None, min_loc_ref=None):
 
+    # get reference template if not given
     n_chans, n_time = temp_.shape
+
+    # the temporal window of an aligned template
+    n_time_small = n_time - 2 * jitter
+
+    if np.sum(np.square(temp_)) == 0:
+        return (np.zeros((n_chans, n_time_small), 'float32'),
+                np.zeros(n_chans, 'int32'),
+                np.arange(n_chans))
+
     if ref is None:
         main_c = temp_.ptp(1).argmax()
         ref = temp_[main_c]
@@ -766,17 +776,17 @@ def align_templates(temp_, jitter, neigh_chans, ref=None, min_loc_ref=None):
             ref = np.roll(ref, min_loc_ref-min_loc)
         ref = ref[jitter:-jitter]
 
-    n_time_small = n_time - 2 * jitter
-
+    # compute the distance between a template (for each channel)
+    # and the ref template for every jitter
     idx = np.arange(n_time_small) + np.arange(2 * jitter)[:, None]
     all_shifts = temp_[:, idx]
     all_dist = np.square(all_shifts - ref).sum(axis=-1)
     all_inv_dist = np.square(-all_shifts - ref).sum(axis=-1)
     dist_ = np.min(np.stack((all_inv_dist, all_dist)), 0)
 
-    # find argrelmin
+    # find argrelmin (all local minimums)
     cc, tt = argrelmin(dist_, axis=1, order=15)
-    val = dist_[cc,tt]
+    val = dist_[cc, tt]
 
     # keep only small enough ones
     idx_keep = np.zeros(len(cc), 'bool')
@@ -784,9 +794,18 @@ def align_templates(temp_, jitter, neigh_chans, ref=None, min_loc_ref=None):
         th = np.median(dist_[c])
         idx_ = np.where(cc == c)[0]
         idx_keep[idx_[val[idx_] < th]] = True
-    cc = cc[idx_keep]
-    tt = tt[idx_keep]
-    val = val[idx_keep]
+
+    # edge case: if all the local minima are not big enough,
+    # just disregard
+    if np.any(idx_keep):
+        cc = cc[idx_keep]
+        tt = tt[idx_keep]
+        val = val[idx_keep]
+
+    if len(val) == 0:
+        cc = np.arange(n_chans)
+        tt = np.argmin(dist_, axis=1)
+        val = dist_[cc,tt]
 
     # do connecting
     #t_diff=10

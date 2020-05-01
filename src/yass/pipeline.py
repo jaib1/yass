@@ -39,6 +39,7 @@ from yass.template_update import run_template_update
 from yass.deconvolve.utils import shift_svd_denoise
 from yass.postprocess.duplicate_soft_assignment import duplicate_soft_assignment
 from yass.soft_assignment.template import get_similar_array
+from yass.template import ptp_similarity_matrix
 #from yass.template import update_templates
 
 from yass.util import (load_yaml, save_metadata, load_logging_config_file,
@@ -105,7 +106,7 @@ def run(config, logger_level='INFO', clean=False, output_dir='tmp/',
     # load logging config file
     logging_config = load_logging_config_file()
     logging_config['handlers']['file']['filename'] = os.path.join(
-        TMP_FOLDER,'yass.log')
+        TMP_FOLDER, 'yass.log')
     logging_config['root']['level'] = logger_level
 
     # configure logging
@@ -174,6 +175,8 @@ def run(config, logger_level='INFO', clean=False, output_dir='tmp/',
     ### Final deconv: Deconvolve, Residual, soft assignment
     (fname_templates,
      fname_spike_train,
+     fname_shifts,
+     fname_scales,
      fname_noise_soft, 
      fname_template_soft)= final_deconv(
         os.path.join(TMP_FOLDER, 'final_deconv'),
@@ -205,16 +208,39 @@ def run(config, logger_level='INFO', clean=False, output_dir='tmp/',
     #np.save(fname_spike_train_final, spike_train)
     #np.save(fname_noise_soft_assignment_final, soft_assignment)
 
+    output_folder = os.path.join(TMP_FOLDER, 'output')
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
     # save the final output
     if CONFIG.deconvolution.update_templates:
-        fname_templates_final = os.path.join(TMP_FOLDER, 'templates')
+        fname_templates_final = os.path.join(output_folder, 'templates')
+        if os.path.exists(fname_templates_final):
+            shutil.rmtree(fname_templates_final)
         shutil.copytree(fname_templates, fname_templates_final)
     else:
-        fname_templates_final = os.path.join(TMP_FOLDER, 'templates.npy')
+        fname_templates_final = os.path.join(output_folder, 'templates.npy')
         shutil.copyfile(fname_templates, fname_templates_final)
-    fname_spike_train_final = os.path.join(TMP_FOLDER, 'spike_train.npy')
+
+    fname_spike_train_final = os.path.join(output_folder, 'spike_train.npy')
     shutil.copyfile(fname_spike_train, fname_spike_train_final)
-    
+
+    fname_shifts_final = os.path.join(output_folder, 'shifts.npy')
+    shutil.copyfile(fname_shifts, fname_shifts_final)
+
+    fname_scales_final = os.path.join(output_folder, 'scales.npy')
+    shutil.copyfile(fname_scales, fname_scales_final)
+
+    fname_noise_soft_final = os.path.join(output_folder, 'noise_soft_assignment.npy')
+    shutil.copyfile(fname_noise_soft, fname_noise_soft_final)
+
+    fname_template_soft_final = os.path.join(output_folder, 'template_soft_assignment.npz')
+    shutil.copyfile(fname_template_soft, fname_template_soft_final)
+
+    ptp_similarity_matrix(os.path.join(output_folder, 'similarity_matrix.npz'),
+                          fname_templates_final,
+                          CONFIG)
+
     total_time = time.time() - start
 
 
@@ -622,7 +648,11 @@ def final_deconv(TMP_FOLDER,
     '''
     
     if generate_phy:
-        phy.run(CONFIG)
+        if update_templates:
+            fname_templates_phy = os.path.join(fname_templates, 'templates_init.npy')
+        else:
+            fname_templates_phy = fname_templates
+        phy.run(CONFIG, fname_spike_train, fname_templates_phy)
     
     logger.info('SOFT ASSIGNMENT')
     fname_noise_soft, fname_template_soft = soft_assignment.run(
@@ -638,6 +668,8 @@ def final_deconv(TMP_FOLDER,
 
     return (fname_templates,
             fname_spike_train,
+            fname_shifts,
+            fname_scales,
             fname_noise_soft, 
             fname_template_soft)
 

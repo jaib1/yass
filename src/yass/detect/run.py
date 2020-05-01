@@ -229,6 +229,10 @@ def run_nn_detction_batch(batch_ids, output_directory,
                 threshold=detect_threshold)
 
             # denoise and take ptp as energy
+            if len(spike_index) == 0:
+                del spike_index, wfs
+                continue
+
             wfs_denoised = denoiser(wfs)[0].data
             energy = (torch.max(wfs_denoised, 1)[0] - torch.min(wfs_denoised, 1)[0])
 
@@ -280,7 +284,7 @@ def run_voltage_treshold(standardized_path, standardized_dtype,
 
     # get data reader
     #n_sec_chunk = CONFIG.resources.n_sec_chunk*CONFIG.resources.n_processors
-    batch_length = CONFIG.resources.n_sec_chunk*10
+    batch_length = CONFIG.resources.n_sec_chunk
     n_sec_chunk = 0.5
     print ("   batch length to (sec): ", batch_length, 
            " (longer increase speed a bit)")
