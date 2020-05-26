@@ -1,5 +1,6 @@
 import os
 from setuptools import setup
+import torch
 from torch.utils.cpp_extension import CppExtension, CUDAExtension, BuildExtension
 
 #ENV = os.environ["CONDA_PREFIX"]  # Absolute path of active conda env root
